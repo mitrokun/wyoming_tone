@@ -6,9 +6,11 @@
 ```
 # 1. Клонирование репозитория
 git clone https://github.com/mitrokun/wyoming_tone.git
-cd tone_asr
+cd wyoming_tone
 # делаем скрипт запуска исполняемым
+cd tone_asr
 chmod +x run
+cd ..
 
 # 2. Создание и активация виртуального окружения
 python3 -m venv .venv
