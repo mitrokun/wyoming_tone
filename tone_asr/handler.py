@@ -25,7 +25,7 @@ REQUIRED_SAMPLES = 4800
 REQUIRED_BYTES = REQUIRED_SAMPLES * 2
 
 VAD_SILENCE_THRESHOLD_RATIO = 0.35
-VAD_PATIENCE_CHUNKS = 5
+VAD_PATIENCE_CHUNKS = 6
 
 
 class ToneEventHandler(AsyncEventHandler):
@@ -236,3 +236,4 @@ class ToneEventHandler(AsyncEventHandler):
             if command in text: return command
 
         return None
+
