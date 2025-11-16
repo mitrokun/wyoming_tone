@@ -39,7 +39,7 @@ async def main() -> None:
     parser.add_argument(
         "--amplification-factor",
         type=float,
-        default=2.0,
+        default=1.0,
         help="Factor to multiply audio samples by. 1.0 means no change.",
     )
     parser.add_argument(
@@ -137,4 +137,5 @@ if __name__ == "__main__":
     try:
         asyncio.run(main())
     except KeyboardInterrupt:
+
         pass
