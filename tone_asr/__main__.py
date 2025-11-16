@@ -25,8 +25,7 @@ async def main() -> None:
     )
     parser.add_argument(
         "--uri", default="tcp://0.0.0.0:10303", help="URI for the server to listen on"
-    )
-    
+    )    
     parser.add_argument(
         "--decoder",
         type=str,
@@ -34,8 +33,7 @@ async def main() -> None:
         default="greedy",
         help="Decoding method. 'greedy' is fast and lightweight (default). "
              "'beam_search' is more accurate but requires downloading a large ~5.5GB language model.",
-    )
-    
+    )    
     parser.add_argument(
         "--amplification-factor",
         type=float,
@@ -104,7 +102,7 @@ async def main() -> None:
                 models=[
                     AsrModel(
                         name="t-tech/T-one",
-                        description="T-one Streaming ASR for Russian Telephony",
+                        description="T-one Streaming ASR",
                         attribution=Attribution(
                             name="t-tech",
                             url="https://huggingface.co/t-tech/T-one",
@@ -139,3 +137,4 @@ if __name__ == "__main__":
     except KeyboardInterrupt:
 
         pass
+
