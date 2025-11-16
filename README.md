@@ -7,10 +7,6 @@
 # 1. Клонирование репозитория
 git clone https://github.com/mitrokun/wyoming_tone.git
 cd wyoming_tone
-# делаем скрипт запуска исполняемым
-cd tone_asr
-chmod +x run
-cd ..
 
 # 2. Создание и активация виртуального окружения
 python3 -m venv .venv
@@ -26,5 +22,10 @@ cd
 # абсолютный путь должен работать из любого места.
 # можно добавлять в хрон или systemd
  ~/wyoming_tone/tone_asr/run --uri tcp://0.0.0.0:10303
+
+# Если разрешения скрипта пропали и не запускается, вернитесь в wyoming_tone/tone_asr
+chmod +x run
+cd
+
 ```
 Для мощных: `--decoder beam_search` скачивает и включает 5гб+ LM, что улучшает результат.
