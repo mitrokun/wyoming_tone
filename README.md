@@ -16,6 +16,8 @@ source .venv/bin/activate
 pip install resampy wyoming
 pip install git+https://github.com/voicekit-team/T-one.git
 
+deactivate
+
 # 4. Запуск сервера
 # возвращаемся в домашний каталог
 cd
