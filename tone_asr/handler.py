@@ -25,7 +25,7 @@ REQUIRED_SAMPLES = 4800
 REQUIRED_BYTES = REQUIRED_SAMPLES * 2
 
 VAD_SILENCE_THRESHOLD_RATIO = 0.35
-VAD_PATIENCE_CHUNKS = 4
+VAD_PATIENCE_CHUNKS = 5
 
 
 class ToneEventHandler(AsyncEventHandler):
@@ -90,20 +90,19 @@ class ToneEventHandler(AsyncEventHandler):
                 _LOGGER.debug("VAD triggered. Forcing end of speech.")
                 asyncio.create_task(self._handle_audio_stop())
             return
-        # --- End VAD Logic ---
 
+        # Audio Processing
         amplification = self.cli_args.amplification_factor
         if amplification != 1.0:
             samples_float *= amplification
-            np.clip(samples_float, -32768, 32767, out=samples_float)
-
         resampled_samples_float = resampy.resample(
             samples_float, INCOMING_SAMPLE_RATE, MODEL_SAMPLE_RATE
         )
-
+        np.clip(resampled_samples_float, -32768, 32767, out=resampled_samples_float)
         samples_int32 = resampled_samples_float.astype(np.int32)
+        
+        # ASR
         new_phrases, self.state = self.pipeline.forward(samples_int32, self.state)
-
         if new_phrases:
             chunk_text = " ".join(p.text for p in new_phrases if p.text)
             if chunk_text:
@@ -111,6 +110,7 @@ class ToneEventHandler(AsyncEventHandler):
                 await self.write_event(TranscriptChunk(text=chunk_text).event())
                 self.accumulated_text = (self.accumulated_text + " " + chunk_text).strip()
         
+        # Command Check
         if self.sorted_commands and not self.check_performed and self.command_max_words > 0:
             word_count = len(self.accumulated_text.split())
             if word_count >= self.command_max_words:
@@ -118,6 +118,7 @@ class ToneEventHandler(AsyncEventHandler):
                 matched_command = self._check_for_command(self.accumulated_text.lower())
                 if matched_command:
                     await self._finalize_recognition(matched_command)
+
 
     async def handle_event(self, event: Event) -> bool:
         if Describe.is_type(event.type):
@@ -210,9 +211,8 @@ class ToneEventHandler(AsyncEventHandler):
         amplification = self.cli_args.amplification_factor
         if amplification != 1.0:
             samples_float *= amplification
-            np.clip(samples_float, -32768, 32767, out=samples_float)
-        
         resampled = resampy.resample(samples_float, INCOMING_SAMPLE_RATE, MODEL_SAMPLE_RATE)
+        np.clip(resampled, -32768, 32767, out=resampled)
         samples_int32 = resampled.astype(np.int32)
         new_phrases, self.state = self.pipeline.forward(samples_int32, self.state)
         if new_phrases:
@@ -234,4 +234,5 @@ class ToneEventHandler(AsyncEventHandler):
         if not self.sorted_commands: return None
         for command in self.sorted_commands:
             if command in text: return command
+
         return None
