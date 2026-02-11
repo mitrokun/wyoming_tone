@@ -1,5 +1,3 @@
-# file: handler.py
-
 import argparse
 import asyncio
 import logging
@@ -25,11 +23,58 @@ REQUIRED_SAMPLES = 4800
 REQUIRED_BYTES = REQUIRED_SAMPLES * 2
 
 VAD_SILENCE_THRESHOLD_RATIO = 0.3
-VAD_PATIENCE_CHUNKS = 6
+VAD_PATIENCE_CHUNKS = 5
+
+
+class StreamAGC:
+    """
+    Simple Automatic Gain Control with Auto-Calibration.
+    Detects if the source is already normalized (DSP) or quiet (raw mic).
+    """
+    def __init__(self, target_level=0.6, max_gain=30.0, min_gain=1.0):
+        self.target_level = target_level
+        self.absolute_max_gain = max_gain
+        self.min_gain = min_gain
+        
+        self.current_peak_envelope = target_level 
+        self.calib_peak = 0.0
+        self.calib_frames = 12
+        self.is_calibrated = False
+        self.dsp_threshold = 0.031 
+        self.active_max_gain = 1.0 
+
+    def process(self, audio_chunk: np.ndarray) -> np.ndarray:
+        if len(audio_chunk) == 0:
+            return audio_chunk
+
+        chunk_max = np.max(np.abs(audio_chunk))
+
+        if self.calib_frames > 0:
+            self.calib_peak = max(self.calib_peak, chunk_max)
+            self.calib_frames -= 1
+            return audio_chunk
+
+        if not self.is_calibrated:
+            if self.calib_peak > self.dsp_threshold:
+                self.active_max_gain = 1.0
+            else:
+                self.active_max_gain = self.absolute_max_gain
+                self.current_peak_envelope = 0.1
+            self.is_calibrated = True
+
+        if self.active_max_gain <= 1.0:
+            return np.clip(audio_chunk, -1.0, 1.0)
+
+        alpha = 0.5 if chunk_max > self.current_peak_envelope else 0.01
+        self.current_peak_envelope = (1 - alpha) * self.current_peak_envelope + alpha * chunk_max
+        safe_envelope = max(self.current_peak_envelope, 1e-6)
+        target_gain = self.target_level / safe_envelope
+        final_gain = np.clip(target_gain, self.min_gain, self.active_max_gain)
+        return np.tanh(audio_chunk * final_gain)
 
 
 class ToneEventHandler(AsyncEventHandler):
-    """Event handler for each client using T-one with a custom VAD."""
+    """Event handler for each client using T-one with a custom VAD and AGC."""
 
     def __init__(
         self,
@@ -53,20 +98,23 @@ class ToneEventHandler(AsyncEventHandler):
         self.vad_peak_energy: float = 0.0
         self.vad_quiet_chunks: int = 0
         self.vad_triggered: bool = False
-
         self.is_done = False
+        
+        # Initialize AGC
+        self.agc = StreamAGC(target_level=0.7, max_gain=30.0)
 
         _LOGGER.debug("Event handler initialized")
 
     async def _process_chunk(self, chunk_bytes: bytes):
-        """Processes a chunk of audio, including VAD logic."""
-        if self.is_done: # Используем новый флаг
+        """Processes a chunk of audio, including VAD logic and AGC."""
+        if self.is_done:
             return
 
-        samples_float = np.frombuffer(chunk_bytes, dtype=np.int16).astype(np.float32)
+        # 1. Convert bytes to float (raw amplitude +/- 32768)
+        samples_raw = np.frombuffer(chunk_bytes, dtype=np.int16).astype(np.float32)
 
-        # VAD Logic
-        rms_energy = np.sqrt(np.mean(samples_float**2))
+        # 2. VAD Logic (Running on raw data to avoid triggering on amplified noise)
+        rms_energy = np.sqrt(np.mean(samples_raw**2))
         self.vad_peak_energy = max(self.vad_peak_energy, rms_energy)
         is_quiet = False
         if self.vad_peak_energy > 0:
@@ -82,17 +130,22 @@ class ToneEventHandler(AsyncEventHandler):
                 asyncio.create_task(self._handle_audio_stop())
             return
 
-        # Audio Processing
-        amplification = self.cli_args.amplification_factor
-        if amplification != 1.0:
-            samples_float *= amplification
+        # 3. AGC Logic
+        # Normalize to -1.0...1.0 for AGC processing
+        samples_norm = samples_raw / 32768.0
+        # Apply AGC
+        samples_norm = self.agc.process(samples_norm)
+        # Scale back to float amplitude for resampling
+        samples_float = samples_norm * 32767.0
+
+        # 4. Resampling
         resampled_samples_float = resampy.resample(
             samples_float, INCOMING_SAMPLE_RATE, MODEL_SAMPLE_RATE
         )
         np.clip(resampled_samples_float, -32768, 32767, out=resampled_samples_float)
         samples_int32 = resampled_samples_float.astype(np.int32)
         
-        # ASR
+        # 5. ASR Inference
         new_phrases, self.state = self.pipeline.forward(samples_int32, self.state)
         if new_phrases:
             chunk_text = " ".join(p.text for p in new_phrases if p.text)
@@ -121,18 +174,20 @@ class ToneEventHandler(AsyncEventHandler):
         return True
 
     async def _handle_audio_start(self) -> None:
-        _LOGGER.debug("Audio stream started. Resetting ASR and VAD state.")
+        _LOGGER.debug("Audio stream started. Resetting ASR, VAD and AGC state.")
         self.state = None
         self.accumulated_text = ""
         self.audio_buffer.clear()
         self.vad_peak_energy = 0.0
         self.vad_quiet_chunks = 0
         self.vad_triggered = False
-        self.is_done = False # Сбрасываем флаг
+        self.is_done = False
+        # Reset AGC for new stream
+        self.agc = StreamAGC(target_level=0.7, max_gain=30.0)
         await self.write_event(TranscriptStart(language=self.language).event())
 
     async def _handle_audio_chunk(self, audio_chunk_bytes: bytes) -> None:
-        if self.is_done: # Используем новый флаг
+        if self.is_done:
             return
         self.audio_buffer.extend(audio_chunk_bytes)
         try:
@@ -146,7 +201,7 @@ class ToneEventHandler(AsyncEventHandler):
             await self.write_event(Error(text=str(e)).event())
 
     async def _handle_audio_stop(self) -> None:
-        if self.is_done: # Используем новый флаг
+        if self.is_done:
             return
         self.vad_triggered = True 
         _LOGGER.debug("End of audio stream. Processing remaining buffer and finalizing.")
@@ -170,17 +225,21 @@ class ToneEventHandler(AsyncEventHandler):
             await self.write_event(Error(text=str(e)).event())
 
     async def _process_chunk_final(self, chunk_bytes: bytes):
-        """Final processing of the buffer without VAD logic."""
-        if self.is_done: # Используем новый флаг
+        """Final processing of the buffer without VAD logic but WITH AGC."""
+        if self.is_done:
             return
             
-        samples_float = np.frombuffer(chunk_bytes, dtype=np.int16).astype(np.float32)
-        amplification = self.cli_args.amplification_factor
-        if amplification != 1.0:
-            samples_float *= amplification
+        samples_raw = np.frombuffer(chunk_bytes, dtype=np.int16).astype(np.float32)
+        
+        # Apply AGC to final chunk as well
+        samples_norm = samples_raw / 32768.0
+        samples_norm = self.agc.process(samples_norm)
+        samples_float = samples_norm * 32767.0
+        
         resampled = resampy.resample(samples_float, INCOMING_SAMPLE_RATE, MODEL_SAMPLE_RATE)
         np.clip(resampled, -32768, 32767, out=resampled)
         samples_int32 = resampled.astype(np.int32)
+        
         new_phrases, self.state = self.pipeline.forward(samples_int32, self.state)
         if new_phrases:
             chunk_text = " ".join(p.text for p in new_phrases if p.text)
@@ -189,11 +248,9 @@ class ToneEventHandler(AsyncEventHandler):
                 self.accumulated_text = (self.accumulated_text + " " + chunk_text).strip()
 
     async def _finalize_recognition(self, text: str) -> None:
-        # --- ИСПРАВЛЕНИЕ: Удалена проверка self.command_recognized ---
         if self.is_done: return
         final_text = text.strip()
         _LOGGER.info("Final result: '%s'", final_text)
         await self.write_event(Transcript(text=final_text if final_text else "").event())
         await self.write_event(TranscriptStop().event())
-        # --- ИСПРАВЛЕНИЕ: Устанавливаем новый флаг, что работа завершена ---
         self.is_done = True

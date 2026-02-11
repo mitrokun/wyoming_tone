@@ -34,12 +34,6 @@ async def main() -> None:
              "'beam_search' is more accurate but requires downloading a large ~5.5GB language model.",
     )
     parser.add_argument(
-        "--amplification-factor",
-        type=float,
-        default=1.0,
-        help="Factor to multiply audio samples by. 1.0 means no change.",
-    )
-    parser.add_argument(
         "--debug", action="store_true", help="Enable debug logging"
     )
     args = parser.parse_args()
@@ -106,9 +100,11 @@ async def main() -> None:
     server = AsyncServer.from_uri(args.uri)
     await server.run(handler_factory)
 
-
-if __name__ == "__main__":
+def run():
     try:
         asyncio.run(main())
     except KeyboardInterrupt:
         pass
+
+if __name__ == "__main__":
+    run()

@@ -1,4 +1,4 @@
-"""Wyoming server for t-one."""
+"""Wyoming server for t-one asr."""
 
 from pathlib import Path
 
