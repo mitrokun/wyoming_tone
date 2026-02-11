@@ -1,6 +1,6 @@
-# Wyoming t-one
+# wyoming t-one
 
-Тестовая (с неоднозначными решениями) реализация сервера для модели от желтого банка.
+Тестовая (с неоднозначными решениями) реализация сервера для asr модели от желтого банка.
 
 
 ```
@@ -31,3 +31,12 @@ cd
 
 ```
 Для мощных: `--decoder beam_search` скачивает и включает 5гб+ LM, что улучшает результат.
+
+
+###  uv
+
+```
+git clone https://github.com/mitrokun/wyoming_tone.git
+cd wyoming_tone
+UV_CACHE_DIR=.uv_cache uv run tone-asr --uri tcp://0.0.0.0:10303
+```
