@@ -1,0 +1,21 @@
+[project]
+name = "tone-asr"
+version = "1.0.0"
+description = "Wyoming server for T-one ASR"
+readme = "README.md"
+requires-python = ">=3.10"
+dependencies = [
+    "wyoming>=1.7.0",
+    "resampy>=0.4.3",
+    "numpy>=1.24.0",
+    "numba>=0.57.0",
+    "tone @ git+https://github.com/voicekit-team/T-one.git",
+]
+
+[project.scripts]
+# Имя команды = "папка_пакета.модуль:функция"
+tone-asr = "tone_asr.__main__:run"
+
+[build-system]
+requires = ["setuptools>=61.0"]
+build-backend = "setuptools.build_meta"
