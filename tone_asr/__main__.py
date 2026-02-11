@@ -34,6 +34,9 @@ async def main() -> None:
              "'beam_search' is more accurate but requires downloading a large ~5.5GB language model.",
     )
     parser.add_argument(
+        "--agc", action="store_true", help="Enable Automatic Gain Control"
+    )
+    parser.add_argument(
         "--debug", action="store_true", help="Enable debug logging"
     )
     args = parser.parse_args()
@@ -42,7 +45,6 @@ async def main() -> None:
         level=logging.DEBUG if args.debug else logging.INFO,
         format="%(asctime)s [%(levelname)s] %(name)s: %(message)s",
     )
-    logging.getLogger("numba").setLevel(logging.WARNING)
 
     _LOGGER.debug(args)
 
