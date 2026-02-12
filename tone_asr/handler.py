@@ -19,7 +19,8 @@ _LOGGER = logging.getLogger(__name__)
 
 INCOMING_SAMPLE_RATE = 16000
 MODEL_SAMPLE_RATE = 8000
-# T-one требует 4800 сэмплов на частоте 16кГц (300 мс)
+# T-one требует 2400 сэмплов на частоте 8кГц (300 мс)
+# REQUIRED_SAMPLES = 2400 * (INCOMING_SAMPLE_RATE/MODEL_SAMPLE_RATE)
 REQUIRED_SAMPLES = 4800 
 
 VAD_SILENCE_THRESHOLD_RATIO = 0.3
@@ -40,8 +41,8 @@ class StreamAGC:
         self.calib_peak = 0.0
         self.is_calibrated = False
         
-        # Порог определения "умного" микрофона
-        self.loud_threshold = 0.3
+        # Порог определения "умного" микрофона (0.1 = -20dB; 0.031 = -30dB)
+        self.loud_threshold = 0.03
         
         # Параметры динамики (как в шерпа)
         self.current_peak_envelope = target_level 
@@ -284,4 +285,5 @@ class ToneEventHandler(AsyncEventHandler):
         _LOGGER.info("Final result: '%s'", final_text)
         await self.write_event(Transcript(text=final_text if final_text else "").event())
         await self.write_event(TranscriptStop().event())
+
         self.is_done = True
